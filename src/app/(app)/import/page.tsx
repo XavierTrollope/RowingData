@@ -34,8 +34,13 @@ export default function ImportPage() {
 
   const importMutation = useMutation({
     mutationFn: async () => {
-      const res = await fetch("/api/sync/import-direct", { method: "POST" });
-      return res.json();
+      const res = await fetch("/api/sync/import-direct", {
+        method: "POST",
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      return data;
     },
     onSuccess: (data) => {
       setImportResult(data);

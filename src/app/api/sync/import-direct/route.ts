@@ -15,10 +15,25 @@ async function concept2Fetch(accessToken: string, path: string) {
   return response;
 }
 
+export const dynamic = "force-dynamic";
+
 export async function POST() {
-  const session = await getSession();
+  let session;
+  try {
+    session = await getSession();
+  } catch (err) {
+    console.error("Session error:", err);
+    return NextResponse.json(
+      { error: `Session error: ${err instanceof Error ? err.message : String(err)}` },
+      { status: 401 }
+    );
+  }
+
   if (!session) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return NextResponse.json(
+      { error: "No session found. Please log out and log back in." },
+      { status: 401 }
+    );
   }
 
   const user = await prisma.user.findUnique({ where: { id: session.id } });
