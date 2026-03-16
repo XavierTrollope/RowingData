@@ -58,7 +58,7 @@ export function getAuthorizationUrl(): string {
     client_id: process.env.CONCEPT2_CLIENT_ID!,
     redirect_uri: process.env.CONCEPT2_REDIRECT_URI!,
     response_type: "code",
-    scope: "results:read user:read",
+    scope: "user:read,results:read",
   });
   return `${CONCEPT2_AUTH_URL}?${params}`;
 }
