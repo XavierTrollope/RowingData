@@ -145,8 +145,7 @@ Respond with ONLY a valid JSON object (no markdown code fences, no extra text):
       model: "gemini-2.5-flash",
       generationConfig: {
         temperature: 0.7,
-        maxOutputTokens: 1500,
-        responseMimeType: "application/json",
+        maxOutputTokens: 2000,
       },
     });
 
@@ -170,9 +169,20 @@ Respond with ONLY a valid JSON object (no markdown code fences, no extra text):
     try {
       report = JSON.parse(text);
     } catch {
-      const match = text.match(/\{[\s\S]*\}/);
-      if (!match) throw new Error("AI returned invalid JSON");
-      report = JSON.parse(match[0]);
+      const cleaned = text
+        .replace(/^```(?:json)?\s*/i, "")
+        .replace(/\s*```\s*$/, "")
+        .trim();
+      try {
+        report = JSON.parse(cleaned);
+      } catch {
+        const match = cleaned.match(/\{[\s\S]*\}/);
+        if (!match) {
+          console.error("AI raw response:", text.substring(0, 500));
+          throw new Error("AI returned invalid JSON");
+        }
+        report = JSON.parse(match[0]);
+      }
     }
 
     const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
