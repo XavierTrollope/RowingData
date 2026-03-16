@@ -3,7 +3,8 @@ import { exchangeCodeForTokens, getCurrentUser } from "@/lib/concept2/client";
 import { prisma } from "@/lib/prisma";
 import { encrypt } from "@/lib/encryption/tokens";
 import { createSession } from "@/lib/auth";
-import { historicalImportQueue } from "@/lib/jobs/queues";
+
+const BASE_URL = process.env.NEXTAUTH_URL || "http://localhost:3000";
 
 export async function GET(request: NextRequest) {
   const code = request.nextUrl.searchParams.get("code");
@@ -11,12 +12,12 @@ export async function GET(request: NextRequest) {
 
   if (error) {
     return NextResponse.redirect(
-      new URL(`/?error=${encodeURIComponent(error)}`, request.url)
+      `${BASE_URL}/?error=${encodeURIComponent(error)}`
     );
   }
 
   if (!code) {
-    return NextResponse.redirect(new URL("/?error=no_code", request.url));
+    return NextResponse.redirect(`${BASE_URL}/?error=no_code`);
   }
 
   try {
@@ -54,18 +55,12 @@ export async function GET(request: NextRequest) {
     });
 
     if (workoutCount === 0) {
-      await historicalImportQueue.add("import", {
-        userId: user.id,
-        concept2UserId: user.concept2Id,
-      });
-      return NextResponse.redirect(new URL("/import", request.url));
+      return NextResponse.redirect(`${BASE_URL}/import`);
     }
 
-    return NextResponse.redirect(new URL("/dashboard", request.url));
+    return NextResponse.redirect(`${BASE_URL}/dashboard`);
   } catch (err) {
     console.error("OAuth callback error:", err);
-    return NextResponse.redirect(
-      new URL("/?error=auth_failed", request.url)
-    );
+    return NextResponse.redirect(`${BASE_URL}/?error=auth_failed`);
   }
 }

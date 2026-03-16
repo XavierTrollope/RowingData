@@ -74,6 +74,7 @@ export async function exchangeCodeForTokens(
       client_id: process.env.CONCEPT2_CLIENT_ID!,
       client_secret: process.env.CONCEPT2_CLIENT_SECRET!,
       redirect_uri: process.env.CONCEPT2_REDIRECT_URI!,
+      scope: "user:read,results:read",
       code,
     }),
   });
