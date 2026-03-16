@@ -40,7 +40,7 @@ export default function DashboardPage() {
   const { data: workoutsRes, isLoading: workoutsLoading } = useQuery({
     queryKey: ["recent-workouts"],
     queryFn: () =>
-      fetchJson<{ data: WorkoutSummary[] }>("/api/workouts?limit=30"),
+      fetchJson<{ data: WorkoutSummary[] }>("/api/workouts?limit=100"),
   });
 
   const { data: pbs, isLoading: pbsLoading } = useQuery({
@@ -53,6 +53,7 @@ export default function DashboardPage() {
 
   const paceTrendData = workouts
     .filter((w) => w.avgSplitSeconds)
+    .slice(0, 30)
     .reverse()
     .map((w) => ({
       label: new Date(w.workoutDate).toLocaleDateString("en-GB", {
@@ -64,6 +65,7 @@ export default function DashboardPage() {
 
   const powerTrendData = workouts
     .filter((w) => w.avgWatts)
+    .slice(0, 30)
     .reverse()
     .map((w) => ({
       label: new Date(w.workoutDate).toLocaleDateString("en-GB", {

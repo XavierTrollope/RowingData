@@ -92,12 +92,19 @@ export async function POST(request: NextRequest) {
           continue;
         }
 
-        const timeTenths = result.time || 0;
+        const timeTenths = result.time ?? 0;
         const durationSeconds = Math.round(timeTenths / 10);
+        const distance = result.distance ?? null;
 
         let avgSplit: number | null = null;
-        if (result.distance && durationSeconds > 0) {
-          avgSplit = (durationSeconds / result.distance) * 500;
+        if (distance && durationSeconds > 0) {
+          avgSplit = (durationSeconds / distance) * 500;
+        }
+
+        let avgWatts: number | null = null;
+        if (avgSplit && avgSplit > 0) {
+          const pacePerMeter = avgSplit / 500;
+          avgWatts = Math.round(2.80 / Math.pow(pacePerMeter, 3));
         }
 
         await prisma.workout.create({
@@ -107,14 +114,14 @@ export async function POST(request: NextRequest) {
             workoutDate: new Date(result.date),
             workoutType: result.type || "rower",
             description: result.workout_type || null,
-            distanceMeters: result.distance || null,
+            distanceMeters: distance,
             durationSeconds,
             avgSplitSeconds: avgSplit,
-            avgSpm: result.stroke_rate || null,
-            avgWatts: null,
-            totalCalories: result.calories_total || null,
-            heartRateAvg: result.heart_rate?.average || null,
-            heartRateMax: result.heart_rate?.max || null,
+            avgSpm: result.stroke_rate ?? null,
+            avgWatts,
+            totalCalories: result.calories_total ?? null,
+            heartRateAvg: result.heart_rate?.average ?? null,
+            heartRateMax: result.heart_rate?.max ?? null,
           },
         });
 

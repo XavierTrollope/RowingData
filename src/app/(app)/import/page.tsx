@@ -14,9 +14,80 @@ import {
 } from "lucide-react";
 
 async function fetchJson<T>(url: string): Promise<T> {
-  const res = await fetch(url);
+  const res = await fetch(url, { credentials: "include" });
   if (!res.ok) throw new Error(`Fetch failed: ${res.status}`);
   return res.json();
+}
+
+function BackfillWattsCard() {
+  const [result, setResult] = useState<{ updated: number } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const backfillMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/sync/backfill-watts", {
+        method: "POST",
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      return data;
+    },
+    onSuccess: (data) => {
+      setResult(data);
+      setError(null);
+    },
+    onError: (err) => setError(String(err)),
+  });
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Recalculate Power Data</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <p className="text-sm text-muted-foreground">
+          Calculate average watts from split times for all workouts missing power
+          data. This uses the standard Concept2 formula.
+        </p>
+        <Button
+          variant="outline"
+          onClick={() => backfillMutation.mutate()}
+          disabled={backfillMutation.isPending}
+        >
+          {backfillMutation.isPending ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              Calculating...
+            </>
+          ) : (
+            <>
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Recalculate Watts
+            </>
+          )}
+        </Button>
+        {result && (
+          <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-4">
+            <div className="flex items-center gap-2">
+              <CheckCircle className="h-4 w-4 text-emerald-500" />
+              <span className="text-sm text-emerald-500">
+                Updated {result.updated} workouts with power data
+              </span>
+            </div>
+          </div>
+        )}
+        {error && (
+          <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-4">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="h-4 w-4 text-red-500" />
+              <span className="text-sm text-red-500">{error}</span>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
 }
 
 export default function ImportPage() {
@@ -153,6 +224,8 @@ export default function ImportPage() {
           </div>
         </CardContent>
       </Card>
+
+      <BackfillWattsCard />
     </div>
   );
 }

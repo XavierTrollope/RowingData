@@ -42,6 +42,12 @@ export async function GET(request: NextRequest) {
 
   const data = workouts.map((w) => {
     const analysis = w.aiAnalysis?.analysisJson as Record<string, unknown> | null;
+    const split = w.avgSplitSeconds ? Number(w.avgSplitSeconds) : null;
+    let watts = w.avgWatts ? Number(w.avgWatts) : null;
+    if (!watts && split && split > 0) {
+      const pacePerMeter = split / 500;
+      watts = Math.round(2.80 / Math.pow(pacePerMeter, 3));
+    }
     return {
       id: w.id,
       workoutDate: w.workoutDate.toISOString(),
@@ -49,9 +55,9 @@ export async function GET(request: NextRequest) {
       description: w.description,
       distanceMeters: w.distanceMeters,
       durationSeconds: w.durationSeconds,
-      avgSplitSeconds: w.avgSplitSeconds ? Number(w.avgSplitSeconds) : null,
+      avgSplitSeconds: split,
       avgSpm: w.avgSpm ? Number(w.avgSpm) : null,
-      avgWatts: w.avgWatts ? Number(w.avgWatts) : null,
+      avgWatts: watts,
       totalCalories: w.totalCalories,
       heartRateAvg: w.heartRateAvg,
       aiGrade: analysis?.overall_grade as string | null ?? null,
