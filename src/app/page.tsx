@@ -4,6 +4,8 @@ import { redirect } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { TrendingUp, Zap, Brain, BarChart3 } from "lucide-react";
 
+export const dynamic = "force-dynamic";
+
 export default async function LandingPage() {
   const session = await getSession();
   if (session) redirect("/dashboard");
