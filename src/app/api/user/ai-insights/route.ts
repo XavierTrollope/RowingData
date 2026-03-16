@@ -142,7 +142,7 @@ Respond with ONLY a valid JSON object (no markdown code fences, no extra text):
   try {
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
     const model = genAI.getGenerativeModel({
-      model: "gemini-2.0-flash",
+      model: "gemini-1.5-flash",
       generationConfig: {
         temperature: 0.7,
         maxOutputTokens: 1500,
@@ -150,8 +150,21 @@ Respond with ONLY a valid JSON object (no markdown code fences, no extra text):
       },
     });
 
-    const result = await model.generateContent(prompt);
-    const text = result.response.text();
+    let text = "";
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const result = await model.generateContent(prompt);
+        text = result.response.text();
+        break;
+      } catch (retryErr: unknown) {
+        const msg = retryErr instanceof Error ? retryErr.message : "";
+        if (attempt === 0 && msg.includes("429")) {
+          await new Promise((r) => setTimeout(r, 25000));
+          continue;
+        }
+        throw retryErr;
+      }
+    }
 
     let report: Record<string, unknown>;
     try {
