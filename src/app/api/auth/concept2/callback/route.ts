@@ -57,16 +57,16 @@ export async function GET(request: NextRequest) {
       .setExpirationTime("30d")
       .sign(SECRET);
 
-    const response = NextResponse.redirect(`${BASE_URL}/dashboard`);
-    response.cookies.set("session", token, {
-      httpOnly: true,
-      secure: BASE_URL.startsWith("https://"),
-      sameSite: "lax",
-      maxAge: 30 * 24 * 60 * 60,
-      path: "/",
-    });
+    const maxAge = 30 * 24 * 60 * 60;
+    const cookieHeader = `session=${token}; HttpOnly; Path=/; Max-Age=${maxAge}; SameSite=Lax`;
 
-    return response;
+    return new Response(null, {
+      status: 302,
+      headers: {
+        Location: `${BASE_URL}/dashboard`,
+        "Set-Cookie": cookieHeader,
+      },
+    });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     console.error("OAuth callback error:", message);
