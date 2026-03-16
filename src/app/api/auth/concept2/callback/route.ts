@@ -58,22 +58,23 @@ export async function GET(request: NextRequest) {
       .sign(SECRET);
 
     const maxAge = 30 * 24 * 60 * 60;
-    const cookieHeader = `session=${token}; HttpOnly; Path=/; Max-Age=${maxAge}; SameSite=Lax`;
     const redirectUrl = `${BASE_URL}/dashboard`;
 
     const html = `<!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>Redirecting...</title></head>
+<html><head><meta charset="utf-8"><title>Logging in...</title></head>
 <body>
 <p>Logging you in...</p>
-<script>window.location.replace("${redirectUrl}");</script>
-<noscript><meta http-equiv="refresh" content="0;url=${redirectUrl}"><a href="${redirectUrl}">Click here to continue</a></noscript>
+<script>
+document.cookie = "session=${token}; path=/; max-age=${maxAge}; samesite=lax";
+window.location.replace("${redirectUrl}");
+</script>
+<noscript><a href="${redirectUrl}">Click here to continue</a></noscript>
 </body></html>`;
 
     return new Response(html, {
       status: 200,
       headers: {
         "Content-Type": "text/html; charset=utf-8",
-        "Set-Cookie": cookieHeader,
         "Cache-Control": "no-store",
       },
     });

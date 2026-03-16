@@ -9,27 +9,33 @@ export async function GET(request: NextRequest) {
   const hasTestCookie = request.cookies.has("debug_test");
   const testCookieValue = request.cookies.get("debug_test")?.value ?? "(not set)";
 
-  const body = JSON.stringify(
-    {
-      cookies: requestCookieNames,
-      hasSession,
-      sessionTokenLength: sessionLen,
-      hasTestCookie,
-      testCookieValue,
-      env: {
-        NEXTAUTH_URL: process.env.NEXTAUTH_URL ?? "(not set)",
-        NODE_ENV: process.env.NODE_ENV,
-      },
+  const data = {
+    cookies: requestCookieNames,
+    hasSession,
+    sessionTokenLength: sessionLen,
+    hasTestCookie,
+    testCookieValue,
+    env: {
+      NEXTAUTH_URL: process.env.NEXTAUTH_URL ?? "(not set)",
+      NODE_ENV: process.env.NODE_ENV,
     },
-    null,
-    2
-  );
+  };
 
-  return new Response(body, {
+  const html = `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Debug</title></head>
+<body>
+<script>
+document.cookie = "debug_test=it_works; path=/; max-age=3600; samesite=lax";
+</script>
+<h2>Server sees these cookies:</h2>
+<pre>${JSON.stringify(data, null, 2)}</pre>
+<p><strong>Refresh this page</strong> to see if debug_test cookie appears above.</p>
+</body></html>`;
+
+  return new Response(html, {
     status: 200,
     headers: {
-      "Content-Type": "application/json",
-      "Set-Cookie": "debug_test=it_works; Path=/; Max-Age=3600; SameSite=Lax",
+      "Content-Type": "text/html; charset=utf-8",
       "Cache-Control": "no-store",
     },
   });
