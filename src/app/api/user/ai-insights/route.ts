@@ -1,14 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { jwtVerify } from "jose";
-import Anthropic from "@anthropic-ai/sdk";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 export const dynamic = "force-dynamic";
 
 const SECRET = new TextEncoder().encode(
   process.env.NEXTAUTH_SECRET || "fallback-secret"
 );
-const MODEL = "claude-sonnet-4-20250514";
 const CACHE_HOURS = 12;
 
 async function getUserId(request: NextRequest): Promise<string | null> {
@@ -61,9 +60,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  if (!process.env.ANTHROPIC_API_KEY) {
+  if (!process.env.GEMINI_API_KEY) {
     return NextResponse.json(
-      { error: "ANTHROPIC_API_KEY not configured" },
+      { error: "GEMINI_API_KEY not configured" },
       { status: 500 }
     );
   }
@@ -126,10 +125,10 @@ export async function POST(request: NextRequest) {
 Date | Type | Distance | Duration | Pace | Power | SPM | HR | Calories
 ${workoutLines}
 
-Respond with a JSON object (no markdown, no extra text):
+Respond with ONLY a valid JSON object (no markdown code fences, no extra text):
 {
-  "fitness_trajectory": "improving" | "plateauing" | "declining",
-  "trajectory_confidence": 0-100,
+  "fitness_trajectory": "improving" or "plateauing" or "declining",
+  "trajectory_confidence": number 0-100,
   "weekly_volume_trend": "brief description",
   "consistency_assessment": "brief description",
   "pace_trend": "brief description of pace changes over time",
@@ -141,17 +140,19 @@ Respond with a JSON object (no markdown, no extra text):
 }`;
 
   try {
-    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-    const message = await anthropic.messages.create({
-      model: MODEL,
-      max_tokens: 1500,
-      system:
-        "You are an expert indoor rowing coach. Return ONLY valid JSON, no markdown or extra text.",
-      messages: [{ role: "user", content: prompt }],
+    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    const model = genAI.getGenerativeModel({
+      model: "gemini-2.0-flash",
+      generationConfig: {
+        temperature: 0.7,
+        maxOutputTokens: 1500,
+        responseMimeType: "application/json",
+      },
     });
 
-    const text =
-      message.content[0].type === "text" ? message.content[0].text : "";
+    const result = await model.generateContent(prompt);
+    const text = result.response.text();
+
     let report: Record<string, unknown>;
     try {
       report = JSON.parse(text);
