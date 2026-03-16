@@ -2,9 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { exchangeCodeForTokens, getCurrentUser } from "@/lib/concept2/client";
 import { prisma } from "@/lib/prisma";
 import { encrypt } from "@/lib/encryption/tokens";
-import { createSession } from "@/lib/auth";
+import { SignJWT } from "jose";
 
 const BASE_URL = process.env.NEXTAUTH_URL || "http://localhost:3000";
+const SECRET = new TextEncoder().encode(
+  process.env.NEXTAUTH_SECRET || "fallback-secret"
+);
 
 export async function GET(request: NextRequest) {
   const code = request.nextUrl.searchParams.get("code");
@@ -21,16 +24,8 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    console.log("OAuth callback: exchanging code for tokens...");
-    console.log("CONCEPT2_CLIENT_ID set:", !!process.env.CONCEPT2_CLIENT_ID);
-    console.log("CONCEPT2_CLIENT_SECRET set:", !!process.env.CONCEPT2_CLIENT_SECRET);
-    console.log("CONCEPT2_REDIRECT_URI:", process.env.CONCEPT2_REDIRECT_URI);
-
     const tokens = await exchangeCodeForTokens(code);
-    console.log("Token exchange successful, fetching user...");
-
     const concept2User = await getCurrentUser(tokens.access_token);
-    console.log("Got Concept2 user:", concept2User.id, concept2User.email);
 
     const user = await prisma.user.upsert({
       where: { concept2Id: concept2User.id },
@@ -50,16 +45,28 @@ export async function GET(request: NextRequest) {
         tokenExpiresAt: new Date(Date.now() + tokens.expires_in * 1000),
       },
     });
-    console.log("User upserted:", user.id);
 
-    await createSession({
-      id: user.id,
+    const token = await new SignJWT({
+      userId: user.id,
       concept2Id: user.concept2Id,
       email: user.email,
       displayName: user.displayName,
+    })
+      .setProtectedHeader({ alg: "HS256" })
+      .setIssuedAt()
+      .setExpirationTime("30d")
+      .sign(SECRET);
+
+    const response = NextResponse.redirect(`${BASE_URL}/dashboard`);
+    response.cookies.set("session", token, {
+      httpOnly: true,
+      secure: BASE_URL.startsWith("https://"),
+      sameSite: "lax",
+      maxAge: 30 * 24 * 60 * 60,
+      path: "/",
     });
 
-    return NextResponse.redirect(`${BASE_URL}/dashboard`);
+    return response;
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     console.error("OAuth callback error:", message);

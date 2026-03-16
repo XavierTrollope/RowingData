@@ -1,14 +1,27 @@
 import { NextResponse } from "next/server";
-import { destroySession } from "@/lib/auth";
 
 const BASE_URL = process.env.NEXTAUTH_URL || "http://localhost:3000";
 
 export async function POST() {
-  await destroySession();
-  return NextResponse.redirect(BASE_URL);
+  const response = NextResponse.redirect(BASE_URL);
+  response.cookies.set("session", "", {
+    httpOnly: true,
+    secure: BASE_URL.startsWith("https://"),
+    sameSite: "lax",
+    maxAge: 0,
+    path: "/",
+  });
+  return response;
 }
 
 export async function GET() {
-  await destroySession();
-  return NextResponse.redirect(BASE_URL);
+  const response = NextResponse.redirect(BASE_URL);
+  response.cookies.set("session", "", {
+    httpOnly: true,
+    secure: BASE_URL.startsWith("https://"),
+    sameSite: "lax",
+    maxAge: 0,
+    path: "/",
+  });
+  return response;
 }
