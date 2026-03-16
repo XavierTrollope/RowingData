@@ -1,8 +1,9 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TrendLineChart, VolumeBarChart } from "@/components/charts/trend-charts";
 import {
@@ -21,6 +22,12 @@ import {
   Calendar,
   TrendingUp,
   Lightbulb,
+  Loader2,
+  Sparkles,
+  ArrowUpRight,
+  ArrowDownRight,
+  ArrowRight,
+  AlertCircle,
 } from "lucide-react";
 import Link from "next/link";
 import type { WorkoutSummary, UserStats, PersonalBest } from "@/types";
@@ -187,38 +194,7 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium flex items-center gap-2">
-                <Lightbulb className="h-4 w-4" />
-                AI Insights
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {workoutsLoading ? (
-                <Skeleton className="h-20" />
-              ) : workouts.length > 0 ? (
-                <div className="space-y-3 text-sm text-muted-foreground">
-                  <p>
-                    Review your latest workout analysis for personalised coaching
-                    recommendations.
-                  </p>
-                  {latestWorkout && (
-                    <Link
-                      href={`/workouts/${latestWorkout.id}`}
-                      className="text-primary hover:underline text-sm font-medium"
-                    >
-                      View Latest Analysis
-                    </Link>
-                  )}
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  AI insights will appear after your first workout is analysed
-                </p>
-              )}
-            </CardContent>
-          </Card>
+          <AiInsightsCard hasWorkouts={workouts.length > 0} />
         </div>
       </div>
     </div>
@@ -337,4 +313,196 @@ function computeWeeklyVolume(
     }),
     meters,
   }));
+}
+
+interface AiInsightsData {
+  narrative: string | null;
+  trajectory: string | null;
+  keyObservations: string[];
+  focusAreas: string[];
+  generatedAt: string | null;
+  cached: boolean;
+  message?: string;
+  error?: string;
+}
+
+const trajectoryConfig: Record<
+  string,
+  { icon: React.ReactNode; label: string; color: string }
+> = {
+  improving: {
+    icon: <ArrowUpRight className="h-4 w-4" />,
+    label: "Improving",
+    color: "text-emerald-500",
+  },
+  plateauing: {
+    icon: <ArrowRight className="h-4 w-4" />,
+    label: "Plateauing",
+    color: "text-amber-500",
+  },
+  declining: {
+    icon: <ArrowDownRight className="h-4 w-4" />,
+    label: "Declining",
+    color: "text-red-500",
+  },
+};
+
+function AiInsightsCard({ hasWorkouts }: { hasWorkouts: boolean }) {
+  const queryClient = useQueryClient();
+
+  const { data: insights, isLoading } = useQuery({
+    queryKey: ["ai-insights"],
+    queryFn: () =>
+      fetch("/api/user/ai-insights", { credentials: "include" }).then((r) =>
+        r.json()
+      ) as Promise<AiInsightsData>,
+    enabled: hasWorkouts,
+  });
+
+  const generateMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/user/ai-insights", {
+        method: "POST",
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      return data as AiInsightsData;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["ai-insights"] });
+    },
+  });
+
+  const traj = insights?.trajectory
+    ? trajectoryConfig[insights.trajectory]
+    : null;
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-sm font-medium flex items-center gap-2">
+            <Lightbulb className="h-4 w-4" />
+            AI Insights
+          </CardTitle>
+          {hasWorkouts && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => generateMutation.mutate()}
+              disabled={generateMutation.isPending}
+            >
+              {generateMutation.isPending ? (
+                <>
+                  <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                  Analysing...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="h-3 w-3 mr-1" />
+                  {insights?.narrative ? "Refresh" : "Generate"}
+                </>
+              )}
+            </Button>
+          )}
+        </div>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <div className="space-y-2">
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-3/4" />
+            <Skeleton className="h-4 w-5/6" />
+          </div>
+        ) : generateMutation.isPending ? (
+          <div className="flex flex-col items-center justify-center py-6 gap-3 text-muted-foreground">
+            <Loader2 className="h-6 w-6 animate-spin text-primary" />
+            <p className="text-sm">
+              Analysing your workout history with AI...
+            </p>
+            <p className="text-xs">This may take 10-20 seconds</p>
+          </div>
+        ) : generateMutation.isError ? (
+          <div className="flex items-start gap-2 text-sm text-red-400">
+            <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+            <p>{String(generateMutation.error)}</p>
+          </div>
+        ) : insights?.narrative ? (
+          <div className="space-y-4">
+            {traj && (
+              <div className="flex items-center gap-2">
+                <Badge
+                  variant="outline"
+                  className={`${traj.color} gap-1 font-medium`}
+                >
+                  {traj.icon}
+                  {traj.label}
+                </Badge>
+                {insights.generatedAt && (
+                  <span className="text-xs text-muted-foreground">
+                    {new Date(insights.generatedAt).toLocaleDateString("en-GB", {
+                      day: "numeric",
+                      month: "short",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </span>
+                )}
+              </div>
+            )}
+            <p className="text-sm leading-relaxed text-muted-foreground">
+              {insights.narrative}
+            </p>
+            {insights.keyObservations.length > 0 && (
+              <div className="space-y-1.5">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  Key Observations
+                </p>
+                <ul className="space-y-1">
+                  {insights.keyObservations.map((obs, i) => (
+                    <li
+                      key={i}
+                      className="text-xs text-muted-foreground flex items-start gap-1.5"
+                    >
+                      <span className="text-primary mt-0.5">•</span>
+                      {obs}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {insights.focusAreas.length > 0 && (
+              <div className="space-y-1.5">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  Recommended Focus
+                </p>
+                <ul className="space-y-1">
+                  {insights.focusAreas.map((area, i) => (
+                    <li
+                      key={i}
+                      className="text-xs text-muted-foreground flex items-start gap-1.5"
+                    >
+                      <Target className="h-3 w-3 mt-0.5 shrink-0 text-primary" />
+                      {area}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="text-center py-4 space-y-2">
+            <Sparkles className="h-8 w-8 mx-auto text-muted-foreground/50" />
+            <p className="text-sm text-muted-foreground">
+              {hasWorkouts
+                ? "Click Generate to get AI-powered coaching insights based on your workout history."
+                : "Import workouts first, then generate AI insights."}
+            </p>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
 }
