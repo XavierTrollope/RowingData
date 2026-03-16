@@ -1,34 +1,41 @@
-import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { decrypt } from "@/lib/encryption/tokens";
+import { jwtVerify } from "jose";
 
+export const dynamic = "force-dynamic";
+
+const SECRET = new TextEncoder().encode(
+  process.env.NEXTAUTH_SECRET || "fallback-secret"
+);
 const CONCEPT2_BASE_URL = "https://log.concept2.com/api";
 
+async function getSessionFromRequest(request: NextRequest) {
+  const token = request.cookies.get("session")?.value;
+  if (!token) return null;
+
+  try {
+    const { payload } = await jwtVerify(token, SECRET);
+    return {
+      id: payload.userId as string,
+      concept2Id: payload.concept2Id as number,
+    };
+  } catch {
+    return null;
+  }
+}
+
 async function concept2Fetch(accessToken: string, path: string) {
-  const response = await fetch(`${CONCEPT2_BASE_URL}${path}`, {
+  return fetch(`${CONCEPT2_BASE_URL}${path}`, {
     headers: {
       Authorization: `Bearer ${accessToken}`,
       Accept: "application/vnd.c2logbook.v1+json",
     },
   });
-  return response;
 }
 
-export const dynamic = "force-dynamic";
-
-export async function POST() {
-  let session;
-  try {
-    session = await getSession();
-  } catch (err) {
-    console.error("Session error:", err);
-    return NextResponse.json(
-      { error: `Session error: ${err instanceof Error ? err.message : String(err)}` },
-      { status: 401 }
-    );
-  }
-
+export async function POST(request: NextRequest) {
+  const session = await getSessionFromRequest(request);
   if (!session) {
     return NextResponse.json(
       { error: "No session found. Please log out and log back in." },
@@ -58,6 +65,12 @@ export async function POST() {
       if (!response.ok) {
         const text = await response.text();
         console.error(`Concept2 API error: ${response.status} ${text}`);
+        if (page === 1) {
+          return NextResponse.json(
+            { error: `Concept2 API error: ${response.status} - ${text}` },
+            { status: 502 }
+          );
+        }
         break;
       }
 
