@@ -21,8 +21,16 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    console.log("OAuth callback: exchanging code for tokens...");
+    console.log("CONCEPT2_CLIENT_ID set:", !!process.env.CONCEPT2_CLIENT_ID);
+    console.log("CONCEPT2_CLIENT_SECRET set:", !!process.env.CONCEPT2_CLIENT_SECRET);
+    console.log("CONCEPT2_REDIRECT_URI:", process.env.CONCEPT2_REDIRECT_URI);
+
     const tokens = await exchangeCodeForTokens(code);
+    console.log("Token exchange successful, fetching user...");
+
     const concept2User = await getCurrentUser(tokens.access_token);
+    console.log("Got Concept2 user:", concept2User.id, concept2User.email);
 
     const user = await prisma.user.upsert({
       where: { concept2Id: concept2User.id },
@@ -42,6 +50,7 @@ export async function GET(request: NextRequest) {
         tokenExpiresAt: new Date(Date.now() + tokens.expires_in * 1000),
       },
     });
+    console.log("User upserted:", user.id);
 
     await createSession({
       id: user.id,
@@ -50,17 +59,12 @@ export async function GET(request: NextRequest) {
       displayName: user.displayName,
     });
 
-    const workoutCount = await prisma.workout.count({
-      where: { userId: user.id },
-    });
-
-    if (workoutCount === 0) {
-      return NextResponse.redirect(`${BASE_URL}/import`);
-    }
-
     return NextResponse.redirect(`${BASE_URL}/dashboard`);
-  } catch (err) {
-    console.error("OAuth callback error:", err);
-    return NextResponse.redirect(`${BASE_URL}/?error=auth_failed`);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("OAuth callback error:", message);
+    return NextResponse.redirect(
+      `${BASE_URL}/?error=${encodeURIComponent(message)}`
+    );
   }
 }
