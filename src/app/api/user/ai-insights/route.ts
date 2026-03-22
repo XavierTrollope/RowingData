@@ -5,6 +5,43 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 
 export const dynamic = "force-dynamic";
 
+function parseJsonResponse(raw: string): Record<string, unknown> {
+  const text = raw.trim();
+
+  try {
+    return JSON.parse(text);
+  } catch { /* fall through */ }
+
+  const fenceCleaned = text
+    .replace(/^[\s\S]*?```(?:json)?\s*/i, "")
+    .replace(/\s*```[\s\S]*$/, "")
+    .trim();
+  try {
+    return JSON.parse(fenceCleaned);
+  } catch { /* fall through */ }
+
+  const match = text.match(/\{[\s\S]*\}/);
+  if (match) {
+    try {
+      return JSON.parse(match[0]);
+    } catch { /* fall through */ }
+
+    const patched = match[0]
+      .replace(/,\s*([\]}])/g, "$1")
+      .replace(/[\x00-\x1f\x7f]/g, (ch) =>
+        ch === "\n" || ch === "\r" || ch === "\t" ? ch : ""
+      );
+    try {
+      return JSON.parse(patched);
+    } catch { /* fall through */ }
+  }
+
+  console.error("AI raw response (first 800 chars):", text.substring(0, 800));
+  throw new Error(
+    "AI returned invalid JSON — could not extract a valid object from the response"
+  );
+}
+
 const SECRET = new TextEncoder().encode(
   process.env.NEXTAUTH_SECRET || "fallback-secret"
 );
@@ -146,6 +183,7 @@ Respond with ONLY a valid JSON object (no markdown code fences, no extra text):
       generationConfig: {
         temperature: 0.7,
         maxOutputTokens: 2000,
+        responseMimeType: "application/json",
       },
     });
 
@@ -153,11 +191,21 @@ Respond with ONLY a valid JSON object (no markdown code fences, no extra text):
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
         const result = await model.generateContent(prompt);
-        text = result.response.text();
-        break;
+        try {
+          text = result.response.text();
+        } catch {
+          const parts = result.response.candidates?.[0]?.content?.parts;
+          if (parts) {
+            text = parts
+              .filter((p: { text?: string }) => typeof p.text === "string")
+              .map((p: { text?: string }) => p.text)
+              .join("");
+          }
+        }
+        if (text) break;
       } catch (retryErr: unknown) {
         const msg = retryErr instanceof Error ? retryErr.message : "";
-        if (attempt === 0 && msg.includes("429")) {
+        if (attempt === 0 && (msg.includes("429") || msg.includes("RESOURCE_EXHAUSTED"))) {
           await new Promise((r) => setTimeout(r, 25000));
           continue;
         }
@@ -165,25 +213,11 @@ Respond with ONLY a valid JSON object (no markdown code fences, no extra text):
       }
     }
 
-    let report: Record<string, unknown>;
-    try {
-      report = JSON.parse(text);
-    } catch {
-      const cleaned = text
-        .replace(/^```(?:json)?\s*/i, "")
-        .replace(/\s*```\s*$/, "")
-        .trim();
-      try {
-        report = JSON.parse(cleaned);
-      } catch {
-        const match = cleaned.match(/\{[\s\S]*\}/);
-        if (!match) {
-          console.error("AI raw response:", text.substring(0, 500));
-          throw new Error("AI returned invalid JSON");
-        }
-        report = JSON.parse(match[0]);
-      }
+    if (!text || !text.trim()) {
+      throw new Error("AI returned an empty response — try again in a moment");
     }
+
+    const report = parseJsonResponse(text);
 
     const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
     await prisma.trendReport.create({
